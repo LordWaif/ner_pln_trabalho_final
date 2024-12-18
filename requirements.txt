@@ -1,0 +1,4 @@
+spacy
+pandas
+argilla==1.12.1
+python-dotenv
