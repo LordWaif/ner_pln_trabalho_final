@@ -1,0 +1,34 @@
+{
+  "id2label": {
+    "0": "B-CATEGORIA",
+    "1": "B-DATA",
+    "2": "B-FILME",
+    "3": "B-LOCAL",
+    "4": "B-ORGANIZACAO",
+    "5": "B-PESSOA",
+    "6": "B-TEMPO",
+    "7": "I-CATEGORIA",
+    "8": "I-FILME",
+    "9": "I-LOCAL",
+    "10": "I-ORGANIZACAO",
+    "11": "I-PESSOA",
+    "12": "I-TEMPO",
+    "13": "O"
+  },
+  "label2id": {
+    "B-CATEGORIA": 0,
+    "B-DATA": 1,
+    "B-FILME": 2,
+    "B-LOCAL": 3,
+    "B-ORGANIZACAO": 4,
+    "B-PESSOA": 5,
+    "B-TEMPO": 6,
+    "I-CATEGORIA": 7,
+    "I-FILME": 8,
+    "I-LOCAL": 9,
+    "I-ORGANIZACAO": 10,
+    "I-PESSOA": 11,
+    "I-TEMPO": 12,
+    "O": 13
+  }
+}

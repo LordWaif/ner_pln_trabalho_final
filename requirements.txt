@@ -2,3 +2,7 @@ spacy
 pandas
 argilla==1.12.1
 python-dotenv
+regex
+scikit-learn
+sklearn_crfsuite
+seqeval

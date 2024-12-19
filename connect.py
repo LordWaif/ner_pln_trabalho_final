@@ -3,7 +3,7 @@ import argilla as rg
 from dotenv import load_dotenv
 load_dotenv()
 import os
-rg.Argilla(
+client = rg.Argilla(
     api_url=os.getenv('URL_ARGILLA'),
     api_key=os.getenv('USER_KEY'),
 )

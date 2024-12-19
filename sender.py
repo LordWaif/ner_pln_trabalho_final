@@ -33,7 +33,6 @@ df.to_csv('IMDB_Dataset_Tokens.csv', index=False,sep=';')
 labels = [
     'PESSOA',
     'FILME',
-    'SERIE',
     'CATEGORIA',
     'ORGANIZACAO',
     'LOCAL',
