@@ -4,9 +4,9 @@ from sklearn_crfsuite import CRF
 from sklearn_crfsuite.metrics import flat_classification_report
 import joblib
 from typing import List, Dict, Tuple
-import json
+import json,spacy
 from seqeval.metrics import classification_report
-
+N = 3
 def load_data() -> Tuple[Dict, pd.DataFrame]:
     """
     Carrega dados salvos e mapeamentos de labels.
@@ -19,43 +19,68 @@ def load_data() -> Tuple[Dict, pd.DataFrame]:
     
     return label_mappings, records_df
 
-def word2features(sent: List[str], i: int) -> Dict[str, str]:
+import regex as re
+def word2features(sent: List[str], doc, i: int, N: int) -> Dict[str, str]:
     """
-    Extrai features para uma palavra em uma posição específica.
+    Extrai features para uma palavra em uma posição específica, considerando uma janela deslizante de comprimento N.
     """
     word = sent[i]
     
     features = {
-        'bias': 1.0,
         'word.lower()': word.lower(),
-        'word[-3:]': word[-3:],
-        'word[-2:]': word[-2:],
+        'word': word,
+        'word.lemma()': doc[i].lemma_,
+        'word.len()': len(word),
         'word.isupper()': word.isupper(),
         'word.istitle()': word.istitle(),
         'word.isdigit()': word.isdigit(),
+        'word.isAlpha()': word.isalpha(),
+        # Features POS
+        'pos': doc[i].pos_,
+        'tag': doc[i].tag_,
+        'dep': doc[i].dep_,
+        'isStop': doc[i].is_stop,
+        'has.number': bool(re.search(r'\d', word)),
+        'is.year': bool(re.match(r'\d{4}', word))
     }
     
-    # Features da palavra anterior
-    if i > 0:
-        word1 = sent[i-1]
-        features.update({
-            '-1:word.lower()': word1.lower(),
-            '-1:word.istitle()': word1.istitle(),
-            '-1:word.isupper()': word1.isupper(),
-        })
-    else:
-        features['BOS'] = True  # Beginning of sentence
-    
-    # Features da próxima palavra
-    if i < len(sent)-1:
-        word1 = sent[i+1]
-        features.update({
-            '+1:word.lower()': word1.lower(),
-            '+1:word.istitle()': word1.istitle(),
-            '+1:word.isupper()': word1.isupper(),
-        })
-    else:
-        features['EOS'] = True  # End of sentence
+    # Features das palavras na janela deslizante
+    for n in range(1, N + 1):
+        if i - n >= 0:
+            word_prev = sent[i - n]
+            features.update({
+                f'-{n}:word.lower()': word_prev.lower(),
+                f'-{n}:word': word_prev,
+                f'-{n}:word.lemma()': doc[i - n].lemma_,
+                f'-{n}:word.len()': len(word_prev),
+                f'-{n}:word.istitle()': word_prev.istitle(),
+                f'-{n}:word.isupper()': word_prev.isupper(),
+                f'-{n}:word.isAlpha()': word_prev.isalpha(),
+                f'-{n}:pos': doc[i - n].pos_,
+                f'-{n}:tag': doc[i - n].tag_,
+                f'-{n}:dep': doc[i - n].dep_,
+                f'-{n}:isStop': doc[i - n].is_stop,
+            })
+        else:
+            features[f'BOS-{n}'] = True  # Beginning of sentence
+        
+        if i + n < len(sent):
+            word_next = sent[i + n]
+            features.update({
+                f'+{n}:word.lower()': word_next.lower(),
+                f'+{n}:word': word_next,
+                f'+{n}:word.lemma()': doc[i + n].lemma_,
+                f'+{n}:word.len()': len(word_next),
+                f'+{n}:word.istitle()': word_next.istitle(),
+                f'+{n}:word.isupper()': word_next.isupper(),
+                f'+{n}:word.isAlpha()': word_next.isalpha(),
+                f'+{n}:pos': doc[i + n].pos_,
+                f'+{n}:tag': doc[i + n].tag_,
+                f'+{n}:dep': doc[i + n].dep_,
+                f'+{n}:isStop': doc[i + n].is_stop,
+            })
+        else:
+            features[f'EOS+{n}'] = True  # End of sentence
     
     return features
 
@@ -63,7 +88,9 @@ def sent2features(sent: List[str]) -> List[Dict[str, str]]:
     """
     Extrai features para todas as palavras em uma sentença.
     """
-    return [word2features(sent, i) for i in range(len(sent))]
+    nlp = spacy.load("en_core_web_sm")
+    doc = nlp(" ".join(sent))
+    return [word2features(sent,doc, i,N) for i in range(len(sent))]
 
 def prepare_data(
     records_df: pd.DataFrame,
@@ -72,12 +99,14 @@ def prepare_data(
     """
     Prepara dados para treinamento do CRF.
     """
+    # records_df = records_df.sample(5)
     # Converte IDs de volta para labels
     id2label = label_mappings['id2label']
-    
+    # TODO Ponto interessante
     X = [sent2features(s) for s in records_df['tokens']]
-    # y = [[id2label[tag] for tag in tags] for tags in records_df['ner_tags']]
-    y = records_df['ner_tags']
+    # X = records_df['tokens'].to_list()
+    y = [[id2label[tag] for tag in tags] for tags in records_df['ner_tags']]
+    # y = records_df['ner_tags'].to_list()
     
     return X, y
 
@@ -109,10 +138,16 @@ def evaluate_model(
     # Gera relatório detalhado
     print("\nRelatório de Classificação:")
     print(classification_report(y_test, y_pred))
-    
+    report_det = classification_report(y_test, y_pred, output_dict=True)
+    report_det = pd.DataFrame(report_det).transpose()
+    report_det.to_csv('report_det.csv')
+
     # Calcula métricas por label
     print("\nMétricas por Label:")
     report = flat_classification_report(y_test, y_pred)
+    report_dict = flat_classification_report(y_test, y_pred, output_dict=True)
+    report_dict = pd.DataFrame(report_dict).transpose()
+    report_dict.to_csv('report_dict.csv')
     print(report)
 
 def save_model(crf: CRF, label_mappings: Dict) -> None:
@@ -137,7 +172,7 @@ def main():
     
     # Define índices para treino e teste (70-30)
     n_samples = len(X)
-    n_train = int(0.7 * n_samples)
+    n_train = int(0.8 * n_samples)
     
     X_train, y_train = X[:n_train], y[:n_train]
     X_test, y_test = X[n_train:], y[n_train:]

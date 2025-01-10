@@ -43,6 +43,10 @@ def process_records(submitted_records: List[Dict]) -> Tuple[List[List[str]], Lis
     for record in submitted_records:
         tags = extract_ner_tags(record["text"], record["span_label.responses"][0])
         tks = record["text"].split()
+        
+        # Substituir B-DATA por B-TEMPO e I-DATA por I-TEMPO
+        tags = ["B-TEMPO" if tag == "B-DATA" else "I-TEMPO" if tag == "I-DATA" else tag for tag in tags]
+        
         if len(tks) == len(tags):  # Garante que tokens e tags têm o mesmo tamanho
             tokens.append(tks)
             ner_tags.append(tags)
@@ -64,12 +68,11 @@ def analyze_entity_distribution(ner_tags: List[List[str]]) -> Dict[str, int]:
 def simple_split(
     tokens: List[List[str]],
     ner_tags: List[List[str]],
-    train_size: float = 0.75,
-    val_size: float = 0.15,
+    train_size: float = 0.8,
     random_state: int = 42
 ) -> Dict[str, Dataset]:
     """
-    Realiza uma divisão simples dos dados, tentando manter entidades raras no conjunto de treino.
+    Realiza uma divisão simples dos dados em treino e teste, tentando manter entidades raras no conjunto de treino.
     """
     # Conta a frequência das entidades em cada sentença
     sentence_entity_counts = []
@@ -77,7 +80,7 @@ def simple_split(
         counts = Counter(tag for tag in tags if tag != "O")
         sentence_entity_counts.append(len(counts))
     
-    # Primeira divisão: treino e resto
+    # Primeira divisão: treino e teste
     indices = np.arange(len(tokens))
     train_size_adjusted = int(len(tokens) * train_size)
     
@@ -87,12 +90,7 @@ def simple_split(
     
     # Separa os conjuntos
     train_idx = indices[:train_size_adjusted]
-    temp_idx = indices[train_size_adjusted:]
-    
-    # Divide o resto entre validação e teste
-    val_size_adjusted = int(len(temp_idx) * (val_size / (1 - train_size)))
-    val_idx = temp_idx[:val_size_adjusted]
-    test_idx = temp_idx[val_size_adjusted:]
+    test_idx = indices[train_size_adjusted:]
     
     # Mapear tags para IDs
     _, label2id = create_label_mappings(ner_tags)
@@ -107,13 +105,26 @@ def simple_split(
     
     return DatasetDict({
         "train": create_subset(train_idx),
-        "validation": create_subset(val_idx),
         "test": create_subset(test_idx)
     })
+
+def print_class_distribution(dataset: Dataset, id2label: Dict[int, str]):
+    """
+    Imprime a distribuição de classes para um dataset.
+    """
+    entity_counts = Counter()
+    for tags in dataset['ner_tags']:
+        entity_counts.update(tags)
+    
+    print("\nDistribuição de classes:")
+    for tag_id, count in sorted(entity_counts.items()):
+        print(f"{id2label[tag_id]}: {count}")
 
 def main(dataset_name: str = "IMDB Dataset NER"):
     # Carregar e processar dados
     submitted_records = load_argilla_data(dataset_name)
+    # Salvar os registros em formato pickle
+    pd.to_pickle(submitted_records, "submitted_records.pkl")
     tokens, ner_tags = process_records(submitted_records)
     
     print(f"\nTotal de exemplos: {len(tokens)}")
@@ -137,6 +148,10 @@ def main(dataset_name: str = "IMDB Dataset NER"):
         "ner_tags": [[label2id[tag] for tag in tags] for tags in ner_tags]
     })
     records_df.to_pickle('records_df_ner.pkl')
+    records_df.to_csv('records_df_ner.csv')
+
+    # Salvar o DatasetDict
+    dataset_dict.save_to_disk("datasets_dict")
     
     return dataset_dict, id2label, label2id
 
@@ -147,3 +162,4 @@ if __name__ == "__main__":
     print("\nTamanho dos conjuntos:")
     for split, dataset in dataset_dict.items():
         print(f"{split}: {len(dataset)} exemplos")
+        print_class_distribution(dataset, id2label)

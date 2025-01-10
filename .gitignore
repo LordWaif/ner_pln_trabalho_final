@@ -7,3 +7,5 @@ amostras_ner.ipynb
 records_df_ner.pkl
 label_mappings.pkl
 *.joblib
+*.pkl
+datasets_dict/
