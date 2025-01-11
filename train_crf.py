@@ -4,22 +4,26 @@ from sklearn_crfsuite import CRF
 from sklearn_crfsuite.metrics import flat_classification_report
 import joblib
 from typing import List, Dict, Tuple
-import json,spacy
+import json, spacy
 from seqeval.metrics import classification_report
+from datasets import load_from_disk
+
 N = 3
-def load_data() -> Tuple[Dict, pd.DataFrame]:
+
+def load_data() -> Tuple[Dict, Dict[str, List[List[str]]]]:
     """
     Carrega dados salvos e mapeamentos de labels.
     """
-    # Carrega os dados processados
-    records_df = pd.read_pickle('records_df_ner.pkl')
+    # Carrega o DatasetDict salvo
+    dataset_dict = load_from_disk('datasets_dict')
     
     # Carrega os mapeamentos de labels
     label_mappings = pd.read_pickle('label_mappings.pkl')
     
-    return label_mappings, records_df
+    return label_mappings, dataset_dict # type: ignore
 
 import regex as re
+
 def word2features(sent: List[str], doc, i: int, N: int) -> Dict[str, str]:
     """
     Extrai features para uma palavra em uma posição específica, considerando uma janela deslizante de comprimento N.
@@ -90,23 +94,18 @@ def sent2features(sent: List[str]) -> List[Dict[str, str]]:
     """
     nlp = spacy.load("en_core_web_sm")
     doc = nlp(" ".join(sent))
-    return [word2features(sent,doc, i,N) for i in range(len(sent))]
+    return [word2features(sent, doc, i, N) for i in range(len(sent))]
 
 def prepare_data(
-    records_df: pd.DataFrame,
+    dataset: Dict[str, List[List[str]]],
     label_mappings: Dict
 ) -> Tuple[List[List[Dict]], List[List[str]]]:
     """
     Prepara dados para treinamento do CRF.
     """
-    # records_df = records_df.sample(5)
-    # Converte IDs de volta para labels
     id2label = label_mappings['id2label']
-    # TODO Ponto interessante
-    X = [sent2features(s) for s in records_df['tokens']]
-    # X = records_df['tokens'].to_list()
-    y = [[id2label[tag] for tag in tags] for tags in records_df['ner_tags']]
-    # y = records_df['ner_tags'].to_list()
+    X = [sent2features(s) for s in dataset['tokens']]
+    y = [[id2label[tag] for tag in tags] for tags in dataset['ner_tags']]
     
     return X, y
 
@@ -164,18 +163,14 @@ def save_model(crf: CRF, label_mappings: Dict) -> None:
 def main():
     # Carrega dados
     print("Carregando dados...")
-    label_mappings, records_df = load_data()
+    label_mappings, dataset_dict = load_data()
     
-    # Prepara features e labels
-    print("Preparando dados...")
-    X, y = prepare_data(records_df, label_mappings)
+    # Prepara features e labels para treino e teste
+    print("Preparando dados de treino...")
+    X_train, y_train = prepare_data(dataset_dict['train'], label_mappings) # type: ignore
     
-    # Define índices para treino e teste (70-30)
-    n_samples = len(X)
-    n_train = int(0.8 * n_samples)
-    
-    X_train, y_train = X[:n_train], y[:n_train]
-    X_test, y_test = X[n_train:], y[n_train:]
+    print("Preparando dados de teste...")
+    X_test, y_test = prepare_data(dataset_dict['test'], label_mappings) # type: ignore
     
     print(f"Tamanho do conjunto de treino: {len(X_train)}")
     print(f"Tamanho do conjunto de teste: {len(X_test)}")
